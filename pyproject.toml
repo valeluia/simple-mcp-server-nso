@@ -1,0 +1,12 @@
+[project]
+name = "nso-mcp-server"
+version = "0.1.0"
+description = "NSO MCP Server"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.116.1",
+    "openai>=1.102.0",
+    "pydantic>=2.11.7",
+    "python-env>=1.0.0",
+]
