@@ -1,0 +1,20 @@
+[Unit]
+Description=Cisco NSO MCP Server
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=30
+User=nsoadmin
+Group=ncsadmin
+WorkingDirectory=/home/nsoadmin/scripts/mcp
+Environment=PATH=/usr/local/bin:/usr/bin:/bin:/home/nsoadmin/.local/bin
+Environment=PYTHONPATH=/opt/ncs/current/src/ncs/pyapi
+EnvironmentFile=/etc/ncs/ncs_env.conf
+ExecStart=/home/nsoadmin/.local/bin/uv run main.py
+SyslogIdentifier=nso-mcp-server
+
+[Install]
+WantedBy=multi-user.target
