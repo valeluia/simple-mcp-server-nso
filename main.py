@@ -11,7 +11,9 @@ from tools import SyncResult, DeviceInfo, build_device_info
 
 
 class Configuration:
-    """Manages configuration and environment variables for the MCP client."""
+    """
+    Manages configuration and environment variables for the MCP server
+    """
 
     def __init__(self) -> None:
         """Initialize configuration with environment variables."""
@@ -20,25 +22,20 @@ class Configuration:
         self.nso_context = os.getenv("NSO_CONTEXT", 'system')
         self.api_port = os.getenv("API_PORT", 8000)
         self.logdir = os.getenv("LOG_DIRECTORY", "/var/log/ncs")
+        self.nso_addresss = os.getenv("NSO_ADDRESS", "127.0.0.1")
 
 
     @staticmethod
     def load_env() -> None:
-        """Load environment variables from .env file."""
         load_dotenv()
 
-    @property
-    def get_openai_api_key(self) -> str:
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment variables")
-        return self.openai_api_key
 
 config = Configuration()
 
 # Setup logger
 logname = os.path.join(config.logdir, "ncs-python-mcp-server.log")
 
-open(logname, 'a').close()  # Create empty file
+open(logname, 'a').close()
 os.chmod(logname, 0o600) 
 
 logging.basicConfig(filename=logname,
@@ -47,9 +44,11 @@ logging.basicConfig(filename=logname,
                     datefmt='%d/%m/%Y %H:%M:%S',
                     level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+
 # Create an MCP server
 mcp = FastMCP(
-    name="NSO MCP Server",
+    name="Simple NSO MCP Server",
     host="0.0.0.0",
     port=config.api_port,  
     stateless_http=True,
@@ -65,7 +64,7 @@ async def get_neds_list() -> list[str]:
     """
     logger.info(f"Getting NEDs list")
     neds_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         for ned in root.ncs__devices.ned_ids.ned_id:
@@ -89,7 +88,7 @@ async def get_devices_name_list() -> list[str]:
     """
     logger.info(f"Getting devices name list")
     devices_name_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         for device in root.devices.device:
@@ -107,7 +106,7 @@ async def get_devices_groups_list() -> list[str]:
     """
     logger.info(f"Getting devices name list")
     device_group_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         for group in root.devices.device_group:
@@ -127,7 +126,7 @@ async def get_device_info(device_name: str) -> DeviceInfo:
         DeviceInfo: device information from NSO CDBa
     """
     logger.info(f"Getting device info for {device_name.strip()}")
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
                 
         if root.devices.device.exists(device_name.strip()):
@@ -151,7 +150,7 @@ async def check_sync_devices_status(device_name: str) -> str:
         str: in-sync if configuration is in sync, out-of-sync if configuration is not in sync, unsupported if the device doesn't support the function
     """
     logger.info(f"Check sync status for device {device_name.strip()}")
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         result = root.ncs__devices.device[device_name.strip()].check_sync()
 
@@ -169,7 +168,7 @@ async def sync_device(device_name: str) -> SyncResult:
         str: true if sync was performed successfuly, and false otherwise
     """
     logger.info(f"Syncing configuration for device {device_name.strip()}")
-    with ncs.maapi.Maapi() as m:
+    with ncs.maapi.Maapi(ip=config.nso_addresss) as m:
         with ncs.maapi.Session(m, config.nso_user, config.nso_context):
             with m.start_write_trans() as trans:
                 root = ncs.maagic.get_root(trans)
@@ -190,7 +189,7 @@ async def sync_device_group(device_group_name: str) -> List[SyncResult]:
     """
     logger.info(f"Syncing configuration for device group {device_group_name.strip()}")
     result_list = []
-    with ncs.maapi.Maapi() as m:
+    with ncs.maapi.Maapi(ip=config.nso_addresss) as m:
         with ncs.maapi.Session(m, config.nso_user, config.nso_context):
             with m.start_write_trans() as trans:
                 root = ncs.maagic.get_root(trans)
@@ -218,7 +217,7 @@ async def get_devices_from_device_group(device_group_name: str) -> list[str]:
         list[str]: A list of network devices from the NSO server.
     """
     logger.info(f"Getting devices list from device group {device_group_name.strip()}")
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         if root.ncs__devices.device_group.exists(device_group_name.strip()):
@@ -242,7 +241,7 @@ async def get_devices_list_per_model(model: str) -> list[DeviceInfo]:
     clean_model = model.strip().lower()
     logger.info(f"Getting devices list per model {clean_model}")
     devices_name_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         for device in root.devices.device:
@@ -268,7 +267,7 @@ async def get_devices_list_per_model_and_version(model: str, version: str) -> li
     clean_version = version.strip().lower()
     logger.info(f"Getting devices list per model {clean_model} and version {clean_version}")
     devices_name_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         for device in root.devices.device:
@@ -295,7 +294,7 @@ async def get_devices_list_per_model_dont_match_version(model: str, version: str
     clean_version = version.strip().lower()
     logger.info(f"Getting devices list per model {clean_model} and version not{clean_version}")
     devices_name_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         for device in root.devices.device:
@@ -314,7 +313,7 @@ async def get_day1_services() -> list[str]:
     logger.info(f"Getting day1 services")
     list_results = []
 
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as t:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as t:
         root = ncs.maagic.get_root(t)
 
         for service in root.ncs__services:
@@ -337,7 +336,7 @@ async def get_all_services() -> list[str]:
     logger.info(f"Getting day1 services")
     list_results = []
 
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as t:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as t:
         root = ncs.maagic.get_root(t)
 
         for service in root.ncs__services:
@@ -360,7 +359,7 @@ async def get_device_configured_services(device_name: str) -> list[str]:
     """
     logger.info(f"Getting services for device {device_name.strip()}")
     service_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
         
         if not device_name.strip() in root.ncs__devices.device:
@@ -382,13 +381,10 @@ async def check_service_sync_status(ncs_keypath: str) -> str:
     """
     logger.info(f"Checking sync status for service {ncs_keypath}")
     service_list = []
-    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context) as read_trans:
+    with ncs.maapi.single_read_trans(config.nso_user, config.nso_context, ip=config.nso_addresss) as read_trans:
         root = ncs.maagic.get_root(read_trans)
-
         service = ncs.maagic.get_node(root, ncs_keypath)
-
         result = service.check_sync()
-
         return str(result.in_sync)
 
 
